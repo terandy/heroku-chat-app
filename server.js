@@ -425,4 +425,8 @@ io.on('connection', socket => {
 app.get('/*', (req, res) => {
   res.sendFile(__dirname + '/build/index.html');
 });
-server.listen(5000);
+const { PORT = 5000, LOCAL_ADDRESS = '0.0.0.0' } = process.env;
+server.listen(PORT, LOCAL_ADDRESS, () => {
+  const address = server.address();
+  console.log('server listening at', address);
+});
