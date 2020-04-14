@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const multer = require('multer');
 const upload = multer({ dest: __dirname + '/build/uploads/' });
+// const upload = multer({ dest: '../client/public/uploads/' });
 const server = require('http').Server(app);
 const io = require('socket.io')(server);
 const sha1 = require('sha1');
@@ -19,6 +20,7 @@ MongoClient.connect(
   { useNewUrlParser: true, useUnifiedTopology: true },
   (err, db) => {
     dbo = db.db('media-board');
+    dbo.collection('users').createIndex({ '$**': 'text' });
     if (err) {
       console.log('ERROR', err);
     }
@@ -233,6 +235,9 @@ app.post('/get-userInfo', upload.none(), (req, res) => {
       console.log('ERROR', err);
     });
 });
+app.post('/get-active-users', upload.none(), (req, res) => {
+  res.json({ success: true, activeUsers: activeUsers });
+});
 
 app.post('/edit-profile-img', upload.single('imgSrc'), (req, res) => {
   let sid = req.cookies.sid;
@@ -247,6 +252,7 @@ app.post('/edit-profile-img', upload.single('imgSrc'), (req, res) => {
         }
       }
     );
+    activeUsers[userID].imgSrc = imgSrc;
     res.send(JSON.stringify({ success: true, imgSrc: imgSrc }));
     return;
   } else {
@@ -270,15 +276,42 @@ app.post('/edit-profile', upload.none(), (req, res) => {
         }
       }
     );
+    activeUsers[userID].fname = fname;
+    activeUsers[userID].lname = lname;
+    activeUsers[userID].description = description;
     res.send(JSON.stringify({ success: true }));
     return;
   } else {
     res.send(JSON.stringify({ success: false }));
   }
 });
+app.post('/searchQuery', upload.none(), (req, res) => {
+  console.log('/searchQuery endpoint');
+  let searchInput = req.body.searchInput;
+  let capSearchInput =
+    searchInput[0].toUpperCase() +
+    searchInput.slice(1, searchInput.length).toLowerCase();
+  console.log('searching for', capSearchInput);
+  dbo
+    .collection('users')
+    .find({ $text: { $search: searchInput } })
+    .toArray()
+    .then(results => {
+      console.log('results', results);
+      res.send(JSON.stringify({ success: true, results: results }));
+    })
+    .catch(err => {
+      console.log('err', err);
+      res.send(JSON.stringify({ success: false }));
+    });
+});
 
 io.on('connection', socket => {
   console.log('user connected:', socket.id);
+
+  socket.on('user-edit', userID => {
+    socket.broadcast.emit('active-user-edit', activeUsers[userID]);
+  });
 
   socket.on('login', userInfo => {
     sockets[userInfo.email] = socket.id;
